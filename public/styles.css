@@ -96,3 +96,7 @@ button:hover {
 .incorrect {
     animation: incorrect 0.5s ease-in-out;
 }
+
+.non-copyable {
+    user-select: none; /* Prevent text selection */
+}

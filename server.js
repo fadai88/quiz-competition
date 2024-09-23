@@ -36,16 +36,6 @@ const gameRooms = new Map();
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
 
-    socket.on('register', async ({ username, email, password }) => {
-        try {
-            const user = new User({ username, email, password });
-            await user.save();
-            socket.emit('registrationSuccess');
-        } catch (error) {
-            socket.emit('registrationFailure', error.message);
-        }
-    });
-
     socket.on('login', async ({ username, password }) => {
         try {
             const user = await User.findOne({ username });
@@ -177,7 +167,7 @@ io.on('connection', (socket) => {
         try {
             const leaderboard = await User.find({}, 'username correctAnswers gamesPlayed totalPoints')
                 .sort({ totalPoints: -1 })
-                .limit(10);
+                .limit(200);
             socket.emit('leaderboardData', leaderboard);
         } catch (error) {
             console.error('Error fetching leaderboard:', error);
@@ -204,6 +194,35 @@ io.on('connection', (socket) => {
             }
         }
     });
+});
+
+// New registration endpoint
+app.post('/register', async (req, res) => {
+    console.log('Incoming registration request:', req.body); // Log incoming request
+
+    const { username, email, password } = req.body;
+
+    // Validate input
+    if (!username || !email || !password) {
+        console.error('Validation failed:', { username, email, password });
+        return res.status(400).send('All fields are required');
+    }
+
+    try {
+        // Check if the email already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).send('Email already in use');
+        }
+
+        // Create a new user
+        const user = new User({ username, email, password });
+        await user.save();
+        res.status(201).send('Registration successful');
+    } catch (error) {
+        console.error('Error registering user:', error);
+        res.status(400).send('Registration failed');
+    }
 });
 
 app.post('/login', async (req, res) => {
@@ -307,7 +326,7 @@ function startNextQuestion(roomId) {
     // Set a new timeout for this question
     room.questionTimeout = setTimeout(() => {
         completeQuestion(roomId);
-    }, 10000); // 10 seconds for each question
+    }, 7000); // 10 seconds for each question
 }
 
 function completeQuestion(roomId) {
@@ -391,21 +410,6 @@ function determineWinner(players) {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-// New function to start AI game
-function startAIGame(username, betAmount) {
-    const aiUsername = 'AI_Opponent'; // Define AI opponent username
-    const roomId = 'AI'; // Unique room ID for AI game
-
-    // Notify players about the AI game
-    io.to(roomId).emit('gameStart', {
-        players: [username, aiUsername],
-        questionCount: 7 // Set the number of questions for the game
-    });
-
-    // Logic to fetch and send questions to the player and AI
-    // You will need to implement AI question-answering logic here
-}
 
 // Function to generate a unique room ID
 function generateRoomId() {

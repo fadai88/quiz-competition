@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trivia Game</title>
     <link rel="stylesheet" href="styles.css"> <!-- Link to the new CSS file -->
+    <style>
+        .non-copyable {
+            user-select: none; /* Prevent text selection */
+        }
+    </style>
 </head>
 <body>
     <div class="form-container" id="registrationForm">
@@ -38,7 +43,7 @@
             <button id="joinGameBtn">Join Game</button>
             <div id="waitingMessage"></div>
             <div id="players"></div>
-            <div id="question"></div>
+            <div id="question" class="non-copyable"></div>
             <div id="options"></div>
             <button id="submitAnswer" style="display:none;">Submit Answer</button>
             <button onclick="showLeaderboard()">Show Leaderboard</button>
@@ -190,7 +195,7 @@
             questionTimer = setTimeout(() => {
                 submitAnswerBtn.disabled = true;
                 waitingMessage.textContent = 'Time\'s up!';
-            }, 10000);
+            }, 7000);
             
             startCountdown(questionStartTime);
         });
@@ -277,7 +282,7 @@
         }
 
         function startCountdown(qStartTime) {
-            const duration = 10;
+            const duration = 7;
 
             clearInterval(countdownInterval);
 
@@ -438,6 +443,10 @@
             socket.on('startGame', () => {
                 // Code to display questions goes here
             });
+        });
+
+        questionDiv.addEventListener('contextmenu', (event) => {
+            event.preventDefault(); // Disable right-click context menu
         });
     </script>
 </body>

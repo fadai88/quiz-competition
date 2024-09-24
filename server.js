@@ -6,6 +6,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 const moment = require('moment');
+const nodemailer = require('nodemailer'); // Import Nodemailer
 const User = require('./models/User');
 
 const app = express();
@@ -33,13 +34,46 @@ const Quiz = mongoose.model('Quiz', new mongoose.Schema({
 
 const gameRooms = new Map();
 
+// Configure Nodemailer
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // or your email service
+    auth: {
+        user: process.env.EMAIL_USER, // Your email address
+        pass: process.env.EMAIL_PASS, // Your app password or email password
+    },
+});
+
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
+
+    socket.on('register', async ({ username, email, password }) => {
+        try {
+            const user = new User({ username, email, password });
+            user.generateVerificationToken(); // Generate verification token
+            await user.save();
+
+            // Send verification email
+            const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${user.verificationToken}`;
+            await transporter.sendMail({
+                to: email,
+                subject: 'Email Verification',
+                html: `Please verify your email by clicking <a href="${verificationUrl}">here</a>`,
+            });
+
+            socket.emit('registrationSuccess');
+        } catch (error) {
+            socket.emit('registrationFailure', error.message);
+        }
+    });
 
     socket.on('login', async ({ username, password }) => {
         try {
             const user = await User.findOne({ username });
             if (user && await user.matchPassword(password)) {
+                if (!user.isVerified) {
+                    socket.emit('loginFailure', 'Please verify your email before logging in.');
+                    return;
+                }
                 socket.emit('loginSuccess', username);
             } else {
                 socket.emit('loginFailure', 'Invalid username or password');
@@ -59,6 +93,10 @@ io.on('connection', (socket) => {
             const user = await User.findOne({ username });
             if (!user) {
                 socket.emit('joinGameFailure', 'User not found.');
+                return;
+            }
+            if (!user.isVerified) {
+                socket.emit('joinGameFailure', 'Please verify your email before joining the game.');
                 return;
             }
             if (user.virtualBalance < betAmount) {
@@ -167,7 +205,7 @@ io.on('connection', (socket) => {
         try {
             const leaderboard = await User.find({}, 'username correctAnswers gamesPlayed totalPoints')
                 .sort({ totalPoints: -1 })
-                .limit(200);
+                .limit(10);
             socket.emit('leaderboardData', leaderboard);
         } catch (error) {
             console.error('Error fetching leaderboard:', error);
@@ -194,35 +232,6 @@ io.on('connection', (socket) => {
             }
         }
     });
-});
-
-// New registration endpoint
-app.post('/register', async (req, res) => {
-    console.log('Incoming registration request:', req.body); // Log incoming request
-
-    const { username, email, password } = req.body;
-
-    // Validate input
-    if (!username || !email || !password) {
-        console.error('Validation failed:', { username, email, password });
-        return res.status(400).send('All fields are required');
-    }
-
-    try {
-        // Check if the email already exists
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).send('Email already in use');
-        }
-
-        // Create a new user
-        const user = new User({ username, email, password });
-        await user.save();
-        res.status(201).send('Registration successful');
-    } catch (error) {
-        console.error('Error registering user:', error);
-        res.status(400).send('Registration failed');
-    }
 });
 
 app.post('/login', async (req, res) => {
@@ -326,7 +335,7 @@ function startNextQuestion(roomId) {
     // Set a new timeout for this question
     room.questionTimeout = setTimeout(() => {
         completeQuestion(roomId);
-    }, 7000); // 10 seconds for each question
+    }, 10000); // 10 seconds for each question
 }
 
 function completeQuestion(roomId) {
@@ -420,4 +429,24 @@ app.get('/join', (req, res) => {
     const roomId = req.query.roomId;
     // Logic to add the player to the specified room
     // ...
+});
+
+// Email verification endpoint
+app.get('/verify-email', async (req, res) => {
+    const { token } = req.query;
+
+    try {
+        const user = await User.findOne({ verificationToken: token });
+        if (!user) {
+            return res.status(400).send('Invalid verification token');
+        }
+
+        user.isVerified = true;
+        user.verificationToken = undefined; // Clear the token
+        await user.save();
+
+        res.send('Email verified successfully! You can now join the game.');
+    } catch (error) {
+        res.status(500).send('Error verifying email');
+    }
 });

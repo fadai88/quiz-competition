@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
@@ -8,7 +9,9 @@ const userSchema = new mongoose.Schema({
     correctAnswers: { type: Number, default: 0 },
     gamesPlayed: { type: Number, default: 0 },
     totalPoints: { type: Number, default: 0 },
-    virtualBalance: { type: Number, default: 10 } // Start with $10 balance
+    virtualBalance: { type: Number, default: 10 }, // Start with $10 balance
+    isVerified: { type: Boolean, default: false },
+    verificationToken: String,
 });
 
 userSchema.pre('save', async function(next) {
@@ -20,6 +23,11 @@ userSchema.pre('save', async function(next) {
 
 userSchema.methods.matchPassword = async function(enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Method to generate verification token
+userSchema.methods.generateVerificationToken = function() {
+    this.verificationToken = crypto.randomBytes(32).toString('hex');
 };
 
 const User = mongoose.model('User', userSchema);

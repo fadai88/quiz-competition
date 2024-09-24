@@ -450,3 +450,25 @@ app.get('/verify-email', async (req, res) => {
         res.status(500).send('Error verifying email');
     }
 });
+
+app.post('/register', async (req, res) => {
+    const { username, email, password } = req.body;
+
+    try {
+        const user = new User({ username, email, password });
+        user.generateVerificationToken(); // Generate verification token
+        await user.save();
+
+        // Send verification email
+        const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${user.verificationToken}`;
+        await transporter.sendMail({
+            to: email,
+            subject: 'Email Verification',
+            html: `Please verify your email by clicking <a href="${verificationUrl}">here</a>`,
+        });
+
+        res.status(201).json({ success: true, message: 'Registration successful! Please check your email to verify your account.' });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+});

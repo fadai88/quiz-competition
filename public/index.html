@@ -345,7 +345,9 @@
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
 
+            // New logic to handle registration with email verification
             socket.emit('register', { username, email, password });
+            alert('Registration successful! Please check your email to verify your account.'); // Notify user
         }
 
         function login() {

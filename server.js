@@ -7,6 +7,7 @@ const path = require('path');
 require('dotenv').config();
 const moment = require('moment');
 const nodemailer = require('nodemailer'); // Import Nodemailer
+const crypto = require('crypto'); // For generating verification tokens
 const User = require('./models/User');
 
 const app = express();
@@ -48,18 +49,19 @@ io.on('connection', (socket) => {
 
     socket.on('register', async ({ username, email, password }) => {
         try {
-            const user = new User({ username, email, password });
-            user.generateVerificationToken(); // Generate verification token
+            const verificationToken = crypto.randomBytes(32).toString('hex'); // Generate token
+            const user = new User({ username, email, password, verificationToken, isVerified: false }); // Save user with verificationToken
             await user.save();
 
             // Send verification email
-            const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${user.verificationToken}`;
+            const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${verificationToken}`;
             await transporter.sendMail({
                 to: email,
                 subject: 'Email Verification',
                 html: `Please verify your email by clicking <a href="${verificationUrl}">here</a>`,
             });
 
+            console.log(`User registered: ${username}, pending verification`); // Log registration
             socket.emit('registrationSuccess');
         } catch (error) {
             socket.emit('registrationFailure', error.message);
@@ -445,6 +447,7 @@ app.get('/verify-email', async (req, res) => {
         user.verificationToken = undefined; // Clear the token
         await user.save();
 
+        console.log(`User verified successfully: ${user.username}`); // Log verification
         res.send('Email verified successfully! You can now join the game.');
     } catch (error) {
         res.status(500).send('Error verifying email');
@@ -455,18 +458,19 @@ app.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
 
     try {
-        const user = new User({ username, email, password });
-        user.generateVerificationToken(); // Generate verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex'); // Generate token
+        const user = new User({ username, email, password, verificationToken, isVerified: false }); // Save user with verificationToken
         await user.save();
 
         // Send verification email
-        const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${user.verificationToken}`;
+        const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${verificationToken}`;
         await transporter.sendMail({
             to: email,
             subject: 'Email Verification',
             html: `Please verify your email by clicking <a href="${verificationUrl}">here</a>`,
         });
 
+        console.log(`User registered: ${username}, pending verification`); // Log registration
         res.status(201).json({ success: true, message: 'Registration successful! Please check your email to verify your account.' });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });

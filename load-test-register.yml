@@ -1,0 +1,16 @@
+config:
+  target: 'http://localhost:5000'  # Your server URL
+  phases:
+    - duration: 10
+      arrivalRate: 10  # Number of users per second
+      name: "User Registration Test"
+scenarios:
+  - flow:
+      - loop:
+          - post:
+              url: "/register"  # Ensure this endpoint is correct
+              json:
+                username: "userx{{ $loopCount }}"  # Generates unique usernames like user1, user2, etc.
+                email: "userx{{ $loopCount }}@example.com"  # Generates unique emails
+                password: "password123"
+        count: 10  # Number of iterations (users)

@@ -9,6 +9,7 @@ const moment = require('moment');
 const nodemailer = require('nodemailer'); // Import Nodemailer
 const crypto = require('crypto'); // For generating verification tokens
 const User = require('./models/User');
+const axios = require('axios'); // Add this line at the top with other imports
 
 const app = express();
 const server = http.createServer(app);
@@ -47,7 +48,13 @@ const transporter = nodemailer.createTransport({
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
 
-    socket.on('register', async ({ username, email, password }) => {
+    socket.on('register', async ({ username, email, password, token }) => {
+        console.log('Received token:', token); // Log the received token
+        const recaptchaResponse = await verifyRecaptcha(token);
+        if (!recaptchaResponse.success) {
+            console.error('reCAPTCHA verification failed:', recaptchaResponse); // Log the failure
+            return socket.emit('registrationFailure', 'reCAPTCHA verification failed.');
+        }
         try {
             const verificationToken = crypto.randomBytes(32).toString('hex'); // Generate token
             const user = new User({ username, email, password, verificationToken, isVerified: false }); // Save user with verificationToken
@@ -68,7 +75,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('login', async ({ username, password }) => {
+    socket.on('login', async ({ username, password, token }) => {
+        const recaptchaResponse = await verifyRecaptcha(token);
+        if (!recaptchaResponse.success) {
+            console.error('reCAPTCHA verification failed:', recaptchaResponse); // Log the failure
+            return socket.emit('loginFailure', 'reCAPTCHA verification failed.');
+        }
         try {
             const user = await User.findOne({ username });
             if (user && await user.matchPassword(password)) {
@@ -352,7 +364,7 @@ function completeQuestion(roomId) {
     // Emit an event to update scores for all players in the room
     io.to(roomId).emit('updateScores', room.players.map(p => ({ 
         username: p.username, 
-        score: p.score,
+        score: p.score, 
         totalResponseTime: p.totalResponseTime || 0
     })));
 
@@ -476,3 +488,16 @@ app.post('/register', async (req, res) => {
         res.status(400).json({ success: false, message: error.message });
     }
 });
+
+// Function to verify reCAPTCHA token
+async function verifyRecaptcha(token) {
+    const secretKey = process.env.RECAPTCHA_SECRET_KEY; // Ensure this is set correctly
+    const response = await axios.post(`https://www.google.com/recaptcha/api/siteverify`, null, {
+        params: {
+            secret: secretKey,
+            response: token
+        }
+    });
+    console.log('reCAPTCHA verification response:', response.data); // Log the verification response
+    return response.data;
+}

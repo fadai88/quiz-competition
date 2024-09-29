@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trivia Game</title>
     <link rel="stylesheet" href="styles.css"> <!-- Link to the new CSS file -->
+    <script src="https://www.google.com/recaptcha/api.js?render=6LeDS1IqAAAAAMx338dPnRkVkj75ggf6Yq4OYu8i"></script> <!-- Add this line -->
     <style>
         .non-copyable {
             user-select: none; /* Prevent text selection */
@@ -345,16 +346,19 @@
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
 
-            // New logic to handle registration with email verification
-            socket.emit('register', { username, email, password });
-            alert('Registration successful! Please check your email to verify your account.'); // Notify user
+            grecaptcha.execute('6LeDS1IqAAAAAMx338dPnRkVkj75ggf6Yq4OYu8i', { action: 'register' }).then((token) => {
+                console.log('Generated token:', token); // Check if token is generated
+                socket.emit('register', { username, email, password, token }); // Send token
+            });
         }
 
         function login() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
 
-            socket.emit('login', { username, password });
+            grecaptcha.execute('6LeDS1IqAAAAAMx338dPnRkVkj75ggf6Yq4OYu8i', { action: 'login' }).then((token) => {
+                socket.emit('login', { username, password, token }); // Send token
+            });
         }
 
         socket.on('registrationSuccess', () => {

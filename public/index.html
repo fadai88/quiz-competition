@@ -13,6 +13,16 @@
     </style>
 </head>
 <body>
+    <header>
+        <h1>Welcome to Brainy Battle Quiz</h1>
+        <button onclick="toggleTheme()">Toggle Theme</button>
+        <nav>
+            <ul>
+                <li><a href="registration.html">Register</a></li>
+                <li><a href="leaderboard.html">Leaderboard</a></li>
+            </ul>
+        </nav>
+    </header>
     <div class="form-container" id="registrationForm">
         <h2>Register</h2>
         <input type="text" id="regUsername" placeholder="Username" required>
@@ -341,17 +351,6 @@
             document.getElementById('gameContainer').style.display = 'block';
         }
 
-        function register() {
-            const username = document.getElementById('regUsername').value;
-            const email = document.getElementById('regEmail').value;
-            const password = document.getElementById('regPassword').value;
-
-            grecaptcha.execute('6LeDS1IqAAAAAMx338dPnRkVkj75ggf6Yq4OYu8i', { action: 'register' }).then((token) => {
-                console.log('Generated token:', token); // Check if token is generated
-                socket.emit('register', { username, email, password, token }); // Send token
-            });
-        }
-
         function login() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
@@ -360,15 +359,6 @@
                 socket.emit('login', { username, password, token }); // Send token
             });
         }
-
-        socket.on('registrationSuccess', () => {
-            alert('Registration successful! Please login.');
-            showLoginForm();
-        });
-
-        socket.on('registrationFailure', (message) => {
-            alert(`Registration failed: ${message}`);
-        });
 
         socket.on('loginFailure', (message) => {
             alert(`Login failed: ${message}`);

@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brainy Battle Quiz - Home</title>
+    <title>Trivia Game</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .non-copyable {
+            user-select: none;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -12,16 +17,17 @@
         <button onclick="toggleTheme()">Toggle Theme</button>
         <nav>
             <ul>
-                <li><a href="login.html">Login/Register</a></li>
+                <li><a href="registration.html">Register</a></li>
+                <li><a href="login.html">Login</a></li>
                 <li><a href="leaderboard.html">Leaderboard</a></li>
+                <li><a href="game.html">Play Game</a></li>
             </ul>
         </nav>
     </header>
 
     <main>
-        <h2>Test Your Knowledge and Win Prizes!</h2>
-        <p>Join our exciting trivia game and compete against other players. Register now to start playing!</p>
-        <a href="login.html" class="cta-button">Get Started</a>
+        <h2>About the Game</h2>
+        <p>Test your knowledge with our trivia game!</p>
     </main>
 
     <script>

@@ -137,13 +137,20 @@ io.on('connection', (socket) => {
             }
 
             if (!roomId) {
-                roomId = generateRoomId(); // Function to generate a unique room ID
+                roomId = generateRoomId();
                 gameRooms.set(roomId, { 
                     players: [], 
                     questions: [], 
                     currentQuestionIndex: 0,
                     answersReceived: 0,
-                    betAmount: betAmount
+                    betAmount: betAmount,
+                    waitingTimeout: setTimeout(async () => {  // Add timeout for single player mode
+                        const room = gameRooms.get(roomId);
+                        if (room && room.players.length === 1) {
+                            console.log(`Starting single player mode for ${username} in room ${roomId}`);
+                            await startSinglePlayerGame(roomId);
+                        }
+                    }, 30000)  // 30 seconds wait time
                 });
                 console.log(`Created new room: ${roomId}`);
             }
@@ -158,6 +165,7 @@ io.on('connection', (socket) => {
             console.log(`Room ${roomId} now has ${room.players.length} player(s)`);
 
             if (room.players.length === 2) {
+                clearTimeout(room.waitingTimeout);  // Clear timeout when second player joins
                 console.log(`Starting game in room ${roomId}`);
                 startGame(roomId);
             } else if (joinedExistingRoom) {
@@ -383,38 +391,51 @@ function completeQuestion(roomId) {
         }, 1000);
     } else {
         console.log(`Game over in room ${roomId}`);
-        const winner = determineWinner(room.players);
-        
-        // Log the values we're about to send
-        console.log('Game over data:', {
-            players: room.players.map(p => ({ 
-                username: p.username, 
-                score: p.score, 
-                totalResponseTime: p.totalResponseTime || 0
-            })),
-            winner: winner,
-            betAmount: room.betAmount
-        });
+        const isSinglePlayer = room.players.length === 1;
+        const player = room.players[0];
+        let winner = null;
 
-        // Update winner's balance
-        User.findOneAndUpdate(
-            { username: winner },
-            { $inc: { virtualBalance: room.betAmount * 1.8 } },
-            { new: true }
-        ).then(updatedUser => {
+        if (isSinglePlayer) {
+            // Win condition for single player: 4 or more correct answers
+            winner = player.score >= 4 ? player.username : null;
+        } else {
+            winner = determineWinner(room.players);
+        }
+
+        // Update winner's balance if there is a winner
+        if (winner) {
+            User.findOneAndUpdate(
+                { username: winner },
+                { $inc: { virtualBalance: room.betAmount * 1.8 } },
+                { new: true }
+            ).then(updatedUser => {
+                io.to(roomId).emit('gameOver', {
+                    players: room.players.map(p => ({ 
+                        username: p.username, 
+                        score: p.score, 
+                        totalResponseTime: p.totalResponseTime || 0
+                    })),
+                    winner: winner,
+                    betAmount: room.betAmount,
+                    winnerBalance: updatedUser.virtualBalance,
+                    singlePlayerMode: isSinglePlayer
+                });
+            }).catch(error => {
+                console.error('Error updating winner balance:', error);
+            });
+        } else {
+            // No winner in single player mode (less than 4 correct answers)
             io.to(roomId).emit('gameOver', {
                 players: room.players.map(p => ({ 
                     username: p.username, 
                     score: p.score, 
                     totalResponseTime: p.totalResponseTime || 0
                 })),
-                winner: winner,
+                winner: null,
                 betAmount: room.betAmount,
-                winnerBalance: updatedUser.virtualBalance
+                singlePlayerMode: isSinglePlayer
             });
-        }).catch(error => {
-            console.error('Error updating winner balance:', error);
-        });
+        }
 
         gameRooms.delete(roomId);
     }
@@ -500,4 +521,26 @@ async function verifyRecaptcha(token) {
     });
     console.log('reCAPTCHA verification response:', response.data); // Log the verification response
     return response.data;
+}
+
+// Add new function for single player mode
+async function startSinglePlayerGame(roomId) {
+    const room = gameRooms.get(roomId);
+    if (!room) return;
+
+    try {
+        room.questions = await Quiz.aggregate([{ $sample: { size: 7 } }]);
+        const player = room.players[0];
+        
+        io.to(roomId).emit('gameStart', { 
+            players: room.players, 
+            questionCount: room.questions.length,
+            singlePlayerMode: true 
+        });
+
+        startNextQuestion(roomId);
+    } catch (error) {
+        console.error('Error starting single player game:', error);
+        io.to(roomId).emit('gameError', 'Failed to start the game. Please try again.');
+    }
 }

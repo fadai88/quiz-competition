@@ -380,6 +380,34 @@
         questionDiv.addEventListener('contextmenu', (event) => {
             event.preventDefault();
         });
+
+        socket.on('answerResult', (data) => {
+            const { username, isCorrect, correctAnswer } = data;
+            if (username === loggedInUser) {
+                const selectedOption = document.querySelector('input[name="answer"]:checked');
+                if (selectedOption) {
+                    selectedOption.parentElement.classList.add(isCorrect ? 'correct' : 'incorrect');
+                }
+            }
+        });
+
+        socket.on('playerAnswered', (username) => {
+            waitingMessage.textContent = `${username} has submitted their answer`;
+        });
+
+        socket.on('roundComplete', (data) => {
+            const { correctAnswer, playerResults } = data;
+            const options = document.querySelectorAll('#options input');
+            
+            // Show correct answer
+            options[correctAnswer].parentElement.classList.add('correct');
+            
+            // Only show the current player's incorrect answer if they were wrong
+            const playerResult = playerResults.find(result => result.username === loggedInUser);
+            if (playerResult && !playerResult.isCorrect) {
+                options[playerResult.answer].parentElement.classList.add('incorrect');
+            }
+        });
     </script>
 </body>
 </html>

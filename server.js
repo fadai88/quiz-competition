@@ -192,6 +192,7 @@ io.on('connection', (socket) => {
         if (!player) return;
 
         player.totalResponseTime = (player.totalResponseTime || 0) + responseTime;
+        player.lastAnswer = answer; // Store the player's answer
 
         const currentQuestion = room.questions[room.currentQuestionIndex];
         const isCorrect = answer === currentQuestion.correctAnswer;
@@ -215,11 +216,27 @@ io.on('connection', (socket) => {
 
         player.answered = true;
 
+        // Send result only to the player who answered
+        socket.emit('answerResult', {
+            username: player.username,
+            isCorrect,
+            correctAnswer: currentQuestion.correctAnswer
+        });
+
         if (room.players.every(p => p.answered)) {
+            // When all players have answered, send the complete results to everyone
+            io.to(roomId).emit('roundComplete', {
+                correctAnswer: currentQuestion.correctAnswer,
+                playerResults: room.players.map(p => ({
+                    username: p.username,
+                    isCorrect: p.lastAnswer === currentQuestion.correctAnswer,
+                    answer: p.lastAnswer
+                }))
+            });
             completeQuestion(roomId);
         } else {
-            // Emit an event to update scores for all players in the room
-            io.to(roomId).emit('updateScores', room.players.map(p => ({ username: p.username, score: p.score })));
+            // Just update that a player has answered without revealing the answer
+            socket.to(roomId).emit('playerAnswered', username);
         }
     });
 
@@ -369,14 +386,12 @@ function completeQuestion(roomId) {
         player.answered = false;
     });
 
-    // Emit an event to update scores for all players in the room
     io.to(roomId).emit('updateScores', room.players.map(p => ({ 
         username: p.username, 
         score: p.score, 
         totalResponseTime: p.totalResponseTime || 0
     })));
 
-    // Clear the question timeout
     if (room.questionTimeout) {
         clearTimeout(room.questionTimeout);
     }
@@ -385,21 +400,41 @@ function completeQuestion(roomId) {
     room.answersReceived = 0;
 
     if (room.currentQuestionIndex < room.questions.length) {
-        // Add a small delay before starting the next question
         setTimeout(() => {
             startNextQuestion(roomId);
         }, 1000);
     } else {
         console.log(`Game over in room ${roomId}`);
         const isSinglePlayer = room.players.length === 1;
-        const player = room.players[0];
         let winner = null;
 
         if (isSinglePlayer) {
-            // Win condition for single player: 4 or more correct answers
+            const player = room.players[0];
             winner = player.score >= 4 ? player.username : null;
+            console.log(`Single player game ended. Player ${player.username} scored ${player.score}/7 ${winner ? '(WIN)' : '(LOSS)'}`);
         } else {
-            winner = determineWinner(room.players);
+            const sortedPlayers = [...room.players].sort((a, b) => {
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                return (a.totalResponseTime || 0) - (b.totalResponseTime || 0);
+            });
+
+            // Log detailed game results
+            console.log('Game Results:');
+            sortedPlayers.forEach(player => {
+                console.log(`Player ${player.username}: ${player.score} correct answers, Response time: ${player.totalResponseTime}ms`);
+            });
+
+            if (sortedPlayers[0].score > sortedPlayers[1].score) {
+                winner = sortedPlayers[0].username;
+                console.log(`Winner by score: ${winner} (${sortedPlayers[0].score} vs ${sortedPlayers[1].score})`);
+            } else if (sortedPlayers[0].score === sortedPlayers[1].score) {
+                winner = sortedPlayers[0].totalResponseTime <= sortedPlayers[1].totalResponseTime ? 
+                    sortedPlayers[0].username : sortedPlayers[1].username;
+                console.log(`Tie on score (${sortedPlayers[0].score}), Winner by response time: ${winner}`);
+                console.log(`Response times: ${sortedPlayers[0].username}: ${sortedPlayers[0].totalResponseTime}ms, ${sortedPlayers[1].username}: ${sortedPlayers[1].totalResponseTime}ms`);
+            }
         }
 
         // Update winner's balance if there is a winner
@@ -424,7 +459,6 @@ function completeQuestion(roomId) {
                 console.error('Error updating winner balance:', error);
             });
         } else {
-            // No winner in single player mode (less than 4 correct answers)
             io.to(roomId).emit('gameOver', {
                 players: room.players.map(p => ({ 
                     username: p.username, 
@@ -441,12 +475,13 @@ function completeQuestion(roomId) {
     }
 }
 
+// Remove or simplify the determineWinner function since the logic is now in completeQuestion
 function determineWinner(players) {
-    const sortedPlayers = players.sort((a, b) => {
+    const sortedPlayers = [...players].sort((a, b) => {
         if (b.score !== a.score) {
-            return b.score - a.score; // Sort by score descending
+            return b.score - a.score;
         }
-        return a.totalResponseTime - b.totalResponseTime; // If scores are tied, sort by total response time ascending
+        return (a.totalResponseTime || 0) - (b.totalResponseTime || 0);
     });
 
     return sortedPlayers[0].username;

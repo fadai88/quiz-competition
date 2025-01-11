@@ -123,12 +123,20 @@
         updateBalance(); // Call this when the page loads
 
         joinGameBtn.addEventListener('click', () => {
+            const walletAddress = localStorage.getItem('walletAddress');
             const betAmount = parseInt(document.getElementById('betAmount').value);
+            
+            if (!walletAddress || !loggedInUser) {
+                alert('Please connect your wallet and log in first');
+                return;
+            }
+
             if (virtualBalance < betAmount) {
                 alert(`Insufficient balance. You need $${betAmount} to join the game.`);
                 return;
             }
-            socket.emit('joinGame', loggedInUser, betAmount);
+
+            socket.emit('joinGame', loggedInUser, betAmount, walletAddress);
             joinGameBtn.style.display = 'none';
             waitingMessage.textContent = 'Waiting for another player... (Game will start in single player mode after 30 seconds)';
         });
@@ -221,7 +229,7 @@
                     waitingMessage.textContent = `Congratulations! You won with ${player.score} correct answers! You won $${(betAmount * 1.8).toFixed(2)}!`;
                     virtualBalance = winnerBalance;
                 } else {
-                    waitingMessage.textContent = `Game Over! You got ${player.score} correct answers. You need at least 4 correct answers to win.`;
+                    waitingMessage.textContent = `Game Over! You got ${player.score} correct answers. You need at least 5 correct answers to win.`;
                 }
             } else {
                 players.sort((a, b) => b.score - a.score || a.totalResponseTime - b.totalResponseTime);
@@ -406,6 +414,19 @@
             const playerResult = playerResults.find(result => result.username === loggedInUser);
             if (playerResult && !playerResult.isCorrect) {
                 options[playerResult.answer].parentElement.classList.add('incorrect');
+            }
+        });
+
+        // Check wallet connection on page load
+        window.addEventListener('load', () => {
+            const walletAddress = localStorage.getItem('walletAddress');
+            if (walletAddress) {
+                document.getElementById('walletStatus').textContent = 
+                    `Connected: ${walletAddress.slice(0,4)}...${walletAddress.slice(-4)}`;
+            } else {
+                alert('Please connect your wallet first');
+                // Optionally redirect to home page
+                // window.location.href = 'index.html';
             }
         });
     </script>

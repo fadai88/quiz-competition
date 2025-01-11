@@ -10,6 +10,8 @@ const nodemailer = require('nodemailer'); // Import Nodemailer
 const crypto = require('crypto'); // For generating verification tokens
 const User = require('./models/User');
 const axios = require('axios'); // Add this line at the top with other imports
+const { Connection, PublicKey, SystemProgram } = require('@solana/web3.js');
+const { Program } = require('@project-serum/anchor');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,6 +46,19 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS, // Your app password or email password
     },
 });
+
+// Create Solana connection
+const connection = new Connection(process.env.SOLANA_RPC_URL);
+
+// Initialize programId
+let programId;
+if (process.env.PROGRAM_ID) {
+    programId = new PublicKey(process.env.PROGRAM_ID);
+} else {
+    console.warn('Warning: PROGRAM_ID not set in environment variables');
+    // Use SystemProgram.programId instead of string
+    programId = SystemProgram.programId;
+}
 
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
@@ -97,15 +112,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('joinGame', async (username, betAmount) => {
-        if (!username) {
-            socket.emit('joinGameFailure', 'You must be logged in to join the game.');
+    socket.on('joinGame', async (username, betAmount, walletAddress) => {
+        // Add debugging logs
+        console.log('Join game attempt:', { username, betAmount, walletAddress });
+
+        if (!username || !walletAddress) {
+            console.log('Join game failed - missing data:', { username, walletAddress });
+            socket.emit('joinGameFailure', 'You must be logged in and connect your wallet to join the game.');
             return;
         }
 
         try {
             const user = await User.findOne({ username });
             if (!user) {
+                console.log('User not found:', username);
                 socket.emit('joinGameFailure', 'User not found.');
                 return;
             }
@@ -158,6 +178,37 @@ io.on('connection', (socket) => {
             const room = gameRooms.get(roomId);
             room.players.push({ id: socket.id, username, score: 0 });
 
+            // Comment out Solana integration for now
+            /*
+            if (!joinedExistingRoom) {
+                await program.rpc.initializeGame(
+                    new BN(betAmount),
+                    roomId,
+                    {
+                        accounts: {
+                            creator: new PublicKey(walletAddress),
+                            game: gameAccount,
+                            systemProgram: SystemProgram.programId,
+                        },
+                    }
+                );
+            } else {
+                await program.rpc.joinGame(
+                    roomId,
+                    {
+                        accounts: {
+                            game: gameAccount,
+                            player: new PublicKey(walletAddress),
+                            playerTokenAccount: playerTokenAccount,
+                            gameVault: gameVault,
+                            tokenProgram: TOKEN_PROGRAM_ID,
+                        },
+                    }
+                );
+            }
+            */
+
+            // The rest of your game logic
             socket.join(roomId);
             socket.emit('gameJoined', roomId);
 
@@ -179,8 +230,8 @@ io.on('connection', (socket) => {
             // Send the room ID back to the player
             socket.emit('roomId', roomId);
         } catch (error) {
-            console.error('Error updating user data:', error);
-            socket.emit('joinGameFailure', 'An error occurred. Please try again.');
+            console.error('Error joining game:', error);
+            socket.emit('joinGameFailure', 'Failed to join game. Please try again.');
         }
     });
 
@@ -410,7 +461,7 @@ function completeQuestion(roomId) {
 
         if (isSinglePlayer) {
             const player = room.players[0];
-            winner = player.score >= 4 ? player.username : null;
+            winner = player.score >= 5 ? player.username : null;
             console.log(`Single player game ended. Player ${player.username} scored ${player.score}/7 ${winner ? '(WIN)' : '(LOSS)'}`);
         } else {
             const sortedPlayers = [...room.players].sort((a, b) => {
@@ -579,3 +630,22 @@ async function startSinglePlayerGame(roomId) {
         io.to(roomId).emit('gameError', 'Failed to start the game. Please try again.');
     }
 }
+
+
+
+
+/*
+Great! Yes, using the System Program ID (11111111111111111111111111111111) as a placeholder is a good way to start development.
+Now that your server is running, here is what you might want to do next:
+Test your basic MongoDB functionality (quiz questions, user registration, etc.)
+When you're ready to implement the actual Solana integration:
+Create your own Solana program (smart contract)
+Deploy it to devnet
+Replace the dummy program ID with your actual program ID
+Implement the token (USDC/USDT) integration
+Would you like me to help you with any of these next steps? For example:
+Testing the existing quiz functionality
+Creating and deploying a Solana program
+Setting up token integration
+Let me know what you'd like to focus on next!
+*/
